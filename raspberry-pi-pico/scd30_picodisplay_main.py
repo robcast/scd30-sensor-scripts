@@ -160,9 +160,10 @@ def display_message(display, text_message):
 def led_measurement(led, data):
     """show measurement data on RGB LED"""
     brgt = 0.2
-    co2 = data['co2']
-    r = co2 / 10
-    g = max(255 - 2.55 * r, 0)
+    # range: 500=green - 1500=red
+    val = max(data['co2'] - 500, 0)
+    r = val / 4
+    g = max(255 - r, 0)
     #print(f"led: {r=} {g=}")
     led.set_rgb(r * brgt, g * brgt, 0)
 
