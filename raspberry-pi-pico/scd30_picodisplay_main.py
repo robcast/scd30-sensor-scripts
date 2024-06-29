@@ -122,20 +122,22 @@ def display_measurement(display, data):
     bg = display.create_pen(0, 0, 0)
     #display.set_font('bitmap8')
     display.set_font('sans')
-    text_scale = 0.9
     # clear 
     display.set_pen(bg)
     display.clear()
     # print data
     display.set_pen(fg)
-    x = 10
-    y = 30
-    lf = 40
-    display.text(f"CO2: {data['co2']:.0f}ppm", x, y, scale=text_scale)
-    y += lf
-    display.text(f"T: {data['temp']:.2f}C", x, y, scale=text_scale)
-    y += lf
-    display.text(f"rH: {data['rh']:.1f}%", x, y, scale=text_scale)
+    # CO2 value
+    display.set_thickness(4)
+    co2t = f"{data['co2']:.0f}"
+    co2w = display.measure_text(co2t, scale=2.5)
+    co2x = 232 - co2w
+    display.text(co2t, co2x, 40, scale=2.5)
+    # ppm
+    display.set_thickness(2)
+    display.text(f"ppm", 160, 80, scale=1)
+    # temp and rH
+    display.text(f"{data['temp']:.2f}C {data['rh']:.1f}%", 10, 120, scale=1)
     # show
     display.update()
 
@@ -143,8 +145,8 @@ def display_message(display, text_message):
     """show text_message string on display"""
     fg = display.create_pen(255, 255, 255)
     bg = display.create_pen(0, 0, 0)
-    #display.set_font('bitmap8')
     display.set_font('sans')
+    display.set_thickness(2)
     text_scale = 0.9
     # clear 
     display.set_pen(bg)
