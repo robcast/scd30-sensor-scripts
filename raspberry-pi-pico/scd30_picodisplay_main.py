@@ -87,6 +87,13 @@ def set_continuous(bus, addr, pressure):
     bus.writeto(addr, b'\x00\x10' + data)
     time.sleep_ms(3)
 
+def set_forced_calibration(bus, addr, cal):
+    """set SCD30 forced calibration value"""
+    # send command 0x5204
+    data = pack_word(cal)
+    bus.writeto(addr, b'\x52\x04' + data)
+    time.sleep_ms(3)
+
 def read_measurement(bus, addr):
     """return SCD30 measurement data structure"""
     # send command 0x0300
@@ -169,61 +176,80 @@ def led_measurement(led, data):
     #print(f"led: {r=} {g=}")
     led.set_rgb(r * brgt, g * brgt, 0)
 
+
+def setup(scd30_addr, interval):
+    """set up I2C bus, SCD30 and display.
+
+       Returns (i2c, display, led).
+    """
+
+    # I2C bus on GPIO pins 4 and 5
+    i2c = I2C(0, scl=Pin(5), sda=Pin(4), freq=100000)
+
+    # scan i2c bus
+    ids = i2c.scan()
+
+    hexids = [hex(id) for id in ids]
+    print(f"i2c bus scan: {hexids}")
+
+    if scd30_addr not in ids:
+        raise RuntimeError(f"SCD30 sensor not found at 0x{scd30_addr:x}!")
+
+    # set up display
+    display = PicoGraphics(display=DISPLAY_PICO_DISPLAY, rotate=0)
+    display.set_backlight(1.0)
+
+    # set up LED
+    led = RGBLED(6, 7, 8)
+    led.set_rgb(0, 0, 0)
+
+    # check measurement interval
+    if get_interval(i2c, scd30_addr) != interval:
+        print(f"measurement interval changed to {interval}s")
+        set_interval(i2c, scd30_addr, interval)
+    
+    return i2c, display, led
+
+
+def main_loop(i2c, display, led, scd30_addr, interval):
+    """measure and  display loop"""
+    busytime = 0
+    while True:
+        rdy = get_data_ready(i2c, scd30_addr)
+        if not rdy:
+            if busytime <= interval:
+                print("not ready, waiting...")
+                time.sleep(1)
+                busytime += 1
+            else:
+                print(f"ERROR: not ready longer than {interval}s. Re-triggering measurement.")
+                # set continuous measurement at 1013mBar
+                set_continuous(i2c, scd30_addr, 1013)
+                busytime = 0
+               
+            continue
+        
+        else:
+            data = read_measurement(i2c, scd30_addr)
+            print(f"read {data}")
+            display_measurement(display, data)
+            led_measurement(led, data)
+            busytime = 0
+            time.sleep(10)
+        
+
 #######################################
 ## main
 
-# I2C bus on GPIO pins 4 and 5
-i2c = I2C(0, scl=Pin(5), sda=Pin(4), freq=100000)
-
-# scan i2c bus
-ids = i2c.scan()
-
-hexids = [hex(id) for id in ids]
-print(f"i2c bus scan: {hexids}")
-
 # SCD30 I2C address
 scd30_addr = 0x61
-
-if scd30_addr not in ids:
-    raise RuntimeError(f"SCD30 sensor not found at 0x{scd30_addr:x}!")
-
-# set up display
-display = PicoGraphics(display=DISPLAY_PICO_DISPLAY, rotate=0)
-display.set_backlight(1.0)
-
-# set up LED
-led = RGBLED(6, 7, 8)
-led.set_rgb(0, 0, 0)
-
-# check measurement interval
+# measurement interval
 interval = 10
-if get_interval(i2c, scd30_addr) != interval:
-    print(f"measurement interval changed to {interval}s")
-    set_interval(i2c, scd30_addr, interval)
+
+# setup
+i2c, display, led = setup(scd30_addr, interval)
 
 display_message(display, 'Starting...')
-# main loop
-busytime = 0
-while True:
-    rdy = get_data_ready(i2c, scd30_addr)
-    if not rdy:
-        if busytime <= interval:
-            print("not ready, waiting...")
-            time.sleep(1)
-            busytime += 1
-        else:
-            print(f"ERROR: not ready longer than {interval}s. Re-triggering measurement.")
-            # set continuous measurement at 1013mBar
-            set_continuous(i2c, scd30_addr, 1013)
-            busytime = 0
-           
-        continue
-    
-    else:
-        data = read_measurement(i2c, scd30_addr)
-        print(f"read {data}")
-        display_measurement(display, data)
-        led_measurement(led, data)
-        busytime = 0
-        time.sleep(10)
-        
+
+# run main loop
+main_loop(i2c, display, led, scd30_addr, interval)
